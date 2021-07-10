@@ -1,6 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BatchSize};
 use std::rc::Rc;
 use std::sync::Arc;
+use bytes::Bytes;
 
 #[derive(Debug)]
 pub struct Error1;
@@ -21,11 +22,11 @@ fn create_value<const N: usize>() -> Result<[u8; N], Error1> {
 }
 
 fn map_value_err_2<const N: usize>() -> Result<[u8; N], Error2> {
-    create_value::<N>().map_err(|Error1| Error2)
+    create_value::<N>().map_err(|Error1{}| Error2)
 }
 
 fn map_value_err_3<const N: usize>() -> Result<[u8; N], Error3> {
-    create_value::<N>().map_err(|Error1| Error3::Error3_1)
+    create_value::<N>().map_err(|Error1{}| Error3::Error3_1)
 }
 
 fn create_box<const N: usize>() -> Result<Box<[u8; N]>, Error1> {
@@ -38,11 +39,11 @@ fn create_box<const N: usize>() -> Result<Box<[u8; N]>, Error1> {
 }
 
 fn map_box_err_2<const N: usize>() -> Result<Box<[u8; N]>, Error2> {
-    create_box::<N>().map_err(|Error1| Error2)
+    create_box::<N>().map_err(|Error1{}| Error2)
 }
 
 fn map_box_err_3<const N: usize>() -> Result<Box<[u8; N]>, Error3> {
-    create_box::<N>().map_err(|Error1| Error3::Error3_1)
+    create_box::<N>().map_err(|Error1{}| Error3::Error3_1)
 }
 
 fn create_rc<const N: usize>() -> Result<std::rc::Rc<[u8; N]>, Error1> {
@@ -55,11 +56,11 @@ fn create_rc<const N: usize>() -> Result<std::rc::Rc<[u8; N]>, Error1> {
 }
 
 fn map_rc_err_2<const N: usize>() -> Result<std::rc::Rc<[u8; N]>, Error2> {
-    create_rc::<N>().map_err(|Error1| Error2)
+    create_rc::<N>().map_err(|Error1{}| Error2)
 }
 
 fn map_rc_err_3<const N: usize>() -> Result<std::rc::Rc<[u8; N]>, Error3> {
-    create_rc::<N>().map_err(|Error1| Error3::Error3_1)
+    create_rc::<N>().map_err(|Error1{}| Error3::Error3_1)
 }
 
 fn create_arc<const N: usize>() -> Result<std::sync::Arc<[u8; N]>, Error1> {
@@ -72,11 +73,11 @@ fn create_arc<const N: usize>() -> Result<std::sync::Arc<[u8; N]>, Error1> {
 }
 
 fn map_arc_err_2<const N: usize>() -> Result<std::sync::Arc<[u8; N]>, Error2> {
-    create_arc::<N>().map_err(|Error1| Error2)
+    create_arc::<N>().map_err(|Error1{}| Error2)
 }
 
 fn map_arc_err_3<const N: usize>() -> Result<std::sync::Arc<[u8; N]>, Error3> {
-    create_arc::<N>().map_err(|Error1| Error3::Error3_1)
+    create_arc::<N>().map_err(|Error1{}| Error3::Error3_1)
 }
 
 #[allow(clippy::clone_on_copy)]
@@ -232,171 +233,154 @@ fn benchmark_struct<const N: usize>(c: &mut Criterion) {
 #[allow(clippy::drop_copy)]
 #[allow(clippy::clone_on_copy)]
 fn benchmark_str<const N: usize>(c: &mut Criterion) {
-    let mut bytes = [b'0'; N];
-    black_box(&mut bytes);
-    let str_chars = std::str::from_utf8(&bytes[..]).unwrap();
+    fn make_str<const N: usize>() -> String {
+        let mut s = String::new();
+        for _ in 0..N {
+            let mut ch = '0';
+            black_box(&mut ch);
+            s.push(ch);
+        }
+        s
+    }
 
     let mut group = c.benchmark_group(format!("{}: create str", N));
 
-    group.bench_function("box", |b| {
-        b.iter(|| {
-            let mut v: Box<str> = str_chars.into();
+    group.bench_function("string", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: String = s;
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("shrink string", |b| {
+        b.iter_batched(make_str::<N>, |mut s| {
+            s.shrink_to_fit();
+            let mut v: String = s;
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("box", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Box<str> = s.into();
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
     });
     group.bench_function("rc", |b| {
-        b.iter(|| {
-            let mut v: Rc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Rc<str> = s.into();
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("arc", |b| {
-        b.iter(|| {
-            let mut v: Arc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Arc<str> = s.into();
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("bytes", |b| {
-        b.iter(|| {
-            let mut v: bytes::Bytes = bytes::Bytes::copy_from_slice(str_chars.as_bytes());
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Bytes = s.into();
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     drop(group);
 
     let mut group = c.benchmark_group(format!("{}: str clone once", N));
 
-    group.bench_function("box", |b| {
-        b.iter(|| {
-            let mut v: Box<str> = str_chars.into();
+    group.bench_function("string", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: String = s;
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("shrink string", |b| {
+        b.iter_batched(make_str::<N>, |mut s| {
+            s.shrink_to_fit();
+            let mut v: String = s;
+            black_box(v.clone());
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("box", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Box<str> = s.into();
+            black_box(v.clone());
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
     });
     group.bench_function("rc", |b| {
-        b.iter(|| {
-            let mut v: Rc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Rc<str> = s.into();
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("arc", |b| {
-        b.iter(|| {
-            let mut v: Arc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Arc<str> = s.into();
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("bytes", |b| {
-        b.iter(|| {
-            let mut v: bytes::Bytes = bytes::Bytes::copy_from_slice(str_chars.as_bytes());
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Bytes = s.into();
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     drop(group);
 
     let mut group = c.benchmark_group(format!("{}: str clone twice", N));
 
-    group.bench_function("box", |b| {
-        b.iter(|| {
-            let mut v: Box<str> = str_chars.into();
+    group.bench_function("string", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: String = s;
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("shrink string", |b| {
+        b.iter_batched(make_str::<N>, |mut s| {
+            s.shrink_to_fit();
+            let mut v: String = s;
+            black_box(v.clone());
+            black_box(v.clone());
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
+    });
+    group.bench_function("box", |b| {
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Box<str> = s.into();
+            black_box(v.clone());
+            black_box(v.clone());
+            black_box(&mut v);
+        }, BatchSize::SmallInput);
     });
     group.bench_function("rc", |b| {
-        b.iter(|| {
-            let mut v: Rc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Rc<str> = s.into();
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("arc", |b| {
-        b.iter(|| {
-            let mut v: Arc<str> = str_chars.into();
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Arc<str> = s.into();
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     group.bench_function("bytes", |b| {
-        b.iter(|| {
-            let mut v: bytes::Bytes = bytes::Bytes::copy_from_slice(str_chars.as_bytes());
+        b.iter_batched(make_str::<N>, |s| {
+            let mut v: Bytes = s.into();
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);
-        })
-    });
-    drop(group);
-
-    let mut group = c.benchmark_group(format!("{}: str move once", N));
-
-    group.bench_function("box", |b| {
-        b.iter(|| {
-            let v: Box<str> = str_chars.into();
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("rc", |b| {
-        b.iter(|| {
-            let v: Rc<str> = str_chars.into();
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("arc", |b| {
-        b.iter(|| {
-            let v: Arc<str> = str_chars.into();
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("bytes", |b| {
-        b.iter(|| {
-            let v: bytes::Bytes = bytes::Bytes::copy_from_slice(str_chars.as_bytes());
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    drop(group);
-
-    let mut group = c.benchmark_group(format!("{}: str move twice", N));
-
-    group.bench_function("box", |b| {
-        b.iter(|| {
-            let v: Box<str> = str_chars.into();
-            let v = black_box(v);
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("rc", |b| {
-        b.iter(|| {
-            let v: Rc<str> = str_chars.into();
-            let v = black_box(v);
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("arc", |b| {
-        b.iter(|| {
-            let v: Arc<str> = str_chars.into();
-            let v = black_box(v);
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
-    });
-    group.bench_function("bytes", |b| {
-        b.iter(|| {
-            let v: bytes::Bytes = bytes::Bytes::copy_from_slice(str_chars.as_bytes());
-            let v = black_box(v);
-            let mut v = black_box(v);
-            black_box(&mut v);
-        })
+        }, BatchSize::SmallInput);
     });
     drop(group);
 }
