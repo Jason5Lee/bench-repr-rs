@@ -9,7 +9,9 @@ edition = "2018"
 criterion = "0.3"
 bytes = "1.0"
 
+[dependencies]
+mimalloc = { version = "*", default-features = false }
+
 [[bench]]
 name = "bench"
 harness = false
-

@@ -2,6 +2,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, BatchSize
 use std::rc::Rc;
 use std::sync::Arc;
 use bytes::Bytes;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[allow(clippy::clone_on_copy)]
 fn benchmark_struct<const N: usize>(c: &mut Criterion) {
@@ -120,22 +124,15 @@ fn benchmark_str<const N: usize>(c: &mut Criterion) {
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
-
-    group.bench_function("box", |b| {
-        b.iter_batched(make_str::<N>, |s| {
-            let mut v: Box<String> = s.into();
-            black_box(&mut v);
-        }, BatchSize::SmallInput);
-    });
     group.bench_function("rc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Rc<str> = s.into();
+            let mut v: Rc<String> = s.into();
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
     group.bench_function("arc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Arc<str> = s.into();
+            let mut v: Arc<String> = s.into();
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
@@ -156,31 +153,16 @@ fn benchmark_str<const N: usize>(c: &mut Criterion) {
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
-    group.bench_function("shrink string", |b| {
-        b.iter_batched(make_str::<N>, |mut s| {
-            s.shrink_to_fit();
-            let mut v: String = s;
-            black_box(v.clone());
-            black_box(&mut v);
-        }, BatchSize::SmallInput);
-    });
-    group.bench_function("box", |b| {
-        b.iter_batched(make_str::<N>, |s| {
-            let mut v: Box<str> = s.into();
-            black_box(v.clone());
-            black_box(&mut v);
-        }, BatchSize::SmallInput);
-    });
     group.bench_function("rc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Rc<str> = s.into();
+            let mut v: Rc<String> = s.into();
             black_box(v.clone());
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
     group.bench_function("arc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Arc<str> = s.into();
+            let mut v: Arc<String> = s.into();
             black_box(v.clone());
             black_box(&mut v);
         }, BatchSize::SmallInput);
@@ -204,26 +186,9 @@ fn benchmark_str<const N: usize>(c: &mut Criterion) {
             black_box(&mut v);
         }, BatchSize::SmallInput);
     });
-    group.bench_function("shrink string", |b| {
-        b.iter_batched(make_str::<N>, |mut s| {
-            s.shrink_to_fit();
-            let mut v: String = s;
-            black_box(v.clone());
-            black_box(v.clone());
-            black_box(&mut v);
-        }, BatchSize::SmallInput);
-    });
-    group.bench_function("box", |b| {
-        b.iter_batched(make_str::<N>, |s| {
-            let mut v: Box<str> = s.into();
-            black_box(v.clone());
-            black_box(v.clone());
-            black_box(&mut v);
-        }, BatchSize::SmallInput);
-    });
     group.bench_function("rc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Rc<str> = s.into();
+            let mut v: Rc<String> = s.into();
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);
@@ -231,7 +196,7 @@ fn benchmark_str<const N: usize>(c: &mut Criterion) {
     });
     group.bench_function("arc", |b| {
         b.iter_batched(make_str::<N>, |s| {
-            let mut v: Arc<str> = s.into();
+            let mut v: Arc<String> = s.into();
             black_box(v.clone());
             black_box(v.clone());
             black_box(&mut v);

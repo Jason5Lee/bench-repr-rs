@@ -21,4 +21,4 @@ Through analysis, I found:
 
 ## TODO
 
-Maybe I should add `Arc<String>` in benchmark because it doesn't have construction clone.
+A optimized `Arc<String>`.
